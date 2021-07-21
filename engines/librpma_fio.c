@@ -108,7 +108,7 @@ char *librpma_fio_allocate_dram(struct thread_data *td, size_t size,
 	return mem_ptr;
 }
 
-char *librpma_fio_allocate_pmem(struct thread_data *td, const char *filename,
+char *librpma_fio_allocate_pmem(struct thread_data *td, struct fio_file *f,
 		size_t size, struct librpma_fio_mem *mem)
 {
 	size_t size_mmap = 0;
@@ -122,18 +122,24 @@ char *librpma_fio_allocate_pmem(struct thread_data *td, const char *filename,
 		return NULL;
 	}
 
-	ws_offset = (td->thread_number - 1) * size;
+	if (f->filetype == FIO_TYPE_CHAR) {
+		/* Each thread uses a separate offset within DeviceDAX. */
+		ws_offset = (td->thread_number - 1) * size;
+	} else {
+		/* Each thread uses a separate FileSystemDAX file. No offset is needed. */
+		ws_offset = 0;
+	}
 
-	if (!filename) {
+	if (!f->file_name) {
 		log_err("fio: filename is not set\n");
 		return NULL;
 	}
 
 	/* map the file */
-	mem_ptr = pmem_map_file(filename, 0 /* len */, 0 /* flags */,
+	mem_ptr = pmem_map_file(f->file_name, 0 /* len */, 0 /* flags */,
 			0 /* mode */, &size_mmap, &is_pmem);
 	if (mem_ptr == NULL) {
-		log_err("fio: pmem_map_file(%s) failed\n", filename);
+		log_err("fio: pmem_map_file(%s) failed\n", f->file_name);
 		/* pmem_map_file() sets errno on failure */
 		td_verror(td, errno, "pmem_map_file");
 		return NULL;
@@ -142,7 +148,7 @@ char *librpma_fio_allocate_pmem(struct thread_data *td, const char *filename,
 	/* pmem is expected */
 	if (!is_pmem) {
 		log_err("fio: %s is not located in persistent memory\n",
-			filename);
+			f->file_name);
 		goto err_unmap;
 	}
 
@@ -150,12 +156,12 @@ char *librpma_fio_allocate_pmem(struct thread_data *td, const char *filename,
 	if (size_mmap < ws_offset + size) {
 		log_err(
 			"fio: %s is too small to handle so many threads (%zu < %zu)\n",
-			filename, size_mmap, ws_offset + size);
+			f->file_name, size_mmap, ws_offset + size);
 		goto err_unmap;
 	}
 
 	log_info("fio: size of memory mapped from the file %s: %zu\n",
-		filename, size_mmap);
+		f->file_name, size_mmap);
 
 	mem->mem_ptr = mem_ptr;
 	mem->size_mmap = size_mmap;
@@ -916,8 +922,7 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		usage_mem_type = RPMA_MR_USAGE_FLUSH_TYPE_VISIBILITY;
 	} else {
 		/* allocation from PMEM using pmem_map_file() */
-		ws_ptr = librpma_fio_allocate_pmem(td, f->file_name,
-				mem_size, &csd->mem);
+		ws_ptr = librpma_fio_allocate_pmem(td, f, mem_size, &csd->mem);
 		usage_mem_type = RPMA_MR_USAGE_FLUSH_TYPE_PERSISTENT;
 	}
 
