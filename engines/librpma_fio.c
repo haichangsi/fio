@@ -939,6 +939,15 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		goto err_free;
 	}
 
+	if ((ret = rpma_mr_advise(mr, 0, mem_size,
+			IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+			IBV_ADVISE_MR_FLAG_FLUSH))) {
+		librpma_td_verror(td, ret, "rpma_mr_advise");
+		/* unsupported system is not an error */
+		if (ret != RPMA_E_NOSUPP)
+			goto err_mr_dereg;
+	}
+
 	/* get size of the memory region's descriptor */
 	if ((ret = rpma_mr_get_descriptor_size(mr, &mr_desc_size))) {
 		librpma_td_verror(td, ret, "rpma_mr_get_descriptor_size");
