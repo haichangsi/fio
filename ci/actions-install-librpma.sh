@@ -15,6 +15,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_INSTALL_PREFIX=/usr \
 	-DBUILD_DOC=OFF \
 	-DBUILD_EXAMPLES=OFF \
+	-DTEST_PYTHON_TOOLS=OFF \
 	-DBUILD_TESTS=OFF
 make -j$(nproc)
 sudo make -j$(nproc) install
