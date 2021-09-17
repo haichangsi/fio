@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-# 11.02.2021 Merge pull request #866 from ldorau/rpma-mmap-memory-for-rpma_mr_reg-in-rpma_flush_apm_new
-LIBRPMA_VERSION=fbac593917e98f3f26abf14f4fad5a832b330f5c
+# Sep 15 2021 Merge pull request #1285 from ldorau/rpma-add-rpma_mr_advise-to-src-librpma.map-file
+LIBRPMA_VERSION=68bb428463f7121789a01007e95cea224496e29f
 ZIP_FILE=rpma.zip
 
 WORKDIR=$(pwd)
@@ -15,6 +15,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_INSTALL_PREFIX=/usr \
 	-DBUILD_DOC=OFF \
 	-DBUILD_EXAMPLES=OFF \
+	-DTEST_PYTHON_TOOLS=OFF \
 	-DBUILD_TESTS=OFF
 make -j$(nproc)
 sudo make -j$(nproc) install
