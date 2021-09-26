@@ -943,9 +943,12 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 			IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
 			IBV_ADVISE_MR_FLAG_FLUSH))) {
 		librpma_td_verror(td, ret, "rpma_mr_advise");
-		/* unsupported system is not an error */
-		if (ret != RPMA_E_NOSUPP)
+		/* an invalid argument is an error */
+		if (ret == RPMA_E_INVAL)
 			goto err_mr_dereg;
+
+		/* XXX log_info mixes with the JSON output */
+		log_err("Note: Having rpma_mr_advise(3) failed because of RPMA_E_NOSUPP or RPMA_E_PROVIDER may come with a performance penalty but it is not a showstopper for running the benchmark.\n");
 	}
 
 	/* get size of the memory region's descriptor */
