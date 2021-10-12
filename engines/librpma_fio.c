@@ -899,6 +899,7 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 	size_t mem_size = td->o.size;
 	size_t mr_desc_size;
 	void *ws_ptr;
+	bool is_dram;
 	int usage_mem_type;
 	int ret;
 
@@ -916,7 +917,8 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		return -1;
 	}
 
-	if (strcmp(f->file_name, "malloc") == 0) {
+	is_dram = (strcmp(f->file_name, "malloc") == 0);
+	if (is_dram) {
 		/* allocation from DRAM using posix_memalign() */
 		ws_ptr = librpma_fio_allocate_dram(td, mem_size, &csd->mem);
 		usage_mem_type = RPMA_MR_USAGE_FLUSH_TYPE_VISIBILITY;
@@ -939,9 +941,10 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		goto err_free;
 	}
 
-	if ((ret = rpma_mr_advise(mr, 0, mem_size,
-			IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-			IBV_ADVISE_MR_FLAG_FLUSH))) {
+	if (!is_dram && f->filetype == FIO_TYPE_FILE &&
+		(ret = rpma_mr_advise(mr, 0, mem_size,
+				IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+				IBV_ADVISE_MR_FLAG_FLUSH))) {
 		librpma_td_verror(td, ret, "rpma_mr_advise");
 		/* an invalid argument is an error */
 		if (ret == RPMA_E_INVAL)
