@@ -35,13 +35,17 @@ DPKGCFG
     case "${CI_TARGET_ARCH}" in
         "i686")
             sudo dpkg --add-architecture i386
+            opts="--allow-downgrades"
             pkgs=("${pkgs[@]/%/:i386}")
             pkgs+=(
                 gcc-multilib
                 pkg-config:i386
+                zlib1g-dev:i386
+                libpcre2-8-0=10.34-7
             )
             ;;
         "x86_64")
+            opts=""
             pkgs+=(
                 libgoogle-perftools-dev
                 libnbd-dev
@@ -69,7 +73,7 @@ DPKGCFG
     echo "Updating APT..."
     sudo apt-get -qq update
     echo "Installing packages..."
-    sudo apt-get install -o APT::Immediate-Configure=false --no-install-recommends -qq -y "${pkgs[@]}"
+    sudo apt-get install "$opts" -o APT::Immediate-Configure=false --no-install-recommends -qq -y "${pkgs[@]}"
     # librpma is supported on the x86_64 architecture for now
     if [[ $CI_TARGET_ARCH == "x86_64" ]]; then
         # install libprotobuf-c-dev required by librpma_gpspm
