@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-# Sep 15 2021 Merge pull request #1285 from ldorau/rpma-add-rpma_mr_advise-to-src-librpma.map-file
-LIBRPMA_VERSION=68bb428463f7121789a01007e95cea224496e29f
+# Jan 24 2022 Merge pull request #1513 from ldorau/common-0.10.0-release
+LIBRPMA_VERSION=0.10.0
 ZIP_FILE=rpma.zip
 
 WORKDIR=$(pwd)
