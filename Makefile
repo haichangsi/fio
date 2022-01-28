@@ -40,6 +40,11 @@ ifdef CONFIG_PDB
   LDFLAGS += -fuse-ld=lld $(LINK_PDBFILE)
 endif
 
+# If clang, do not use builtin stpcpy as it breaks the build
+ifeq ($(CC),clang)
+  FIO_CFLAGS += -fno-builtin-stpcpy
+endif
+
 ifdef CONFIG_GFIO
   PROGS += gfio
 endif
@@ -51,25 +56,26 @@ SOURCE :=	$(sort $(patsubst $(SRCDIR)/%,%,$(wildcard $(SRCDIR)/crc/*.c)) \
 		pshared.c options.c \
 		smalloc.c filehash.c profile.c debug.c engines/cpu.c \
 		engines/mmap.c engines/sync.c engines/null.c engines/net.c \
-		engines/ftruncate.c engines/filecreate.c engines/filestat.c \
+		engines/ftruncate.c engines/filecreate.c engines/filestat.c engines/filedelete.c \
+		engines/exec.c \
 		server.c client.c iolog.c backend.c libfio.c flow.c cconv.c \
 		gettime-thread.c helpers.c json.c idletime.c td_error.c \
 		profiles/tiobench.c profiles/act.c io_u_queue.c filelock.c \
 		workqueue.c rate-submit.c optgroup.c helper_thread.c \
-		steadystate.c zone-dist.c zbd.c
+		steadystate.c zone-dist.c zbd.c dedupe.c
 
 ifdef CONFIG_LIBHDFS
   HDFSFLAGS= -I $(JAVA_HOME)/include -I $(JAVA_HOME)/include/linux -I $(FIO_LIBHDFS_INCLUDE)
-  HDFSLIB= -Wl,-rpath $(JAVA_HOME)/jre/lib/$(FIO_HDFS_CPU)/server -L$(JAVA_HOME)/jre/lib/$(FIO_HDFS_CPU)/server $(FIO_LIBHDFS_LIB)/libhdfs.a -ljvm
+  HDFSLIB= -Wl,-rpath $(JAVA_HOME)/lib/$(FIO_HDFS_CPU)/server -L$(JAVA_HOME)/lib/$(FIO_HDFS_CPU)/server $(FIO_LIBHDFS_LIB)/libhdfs.a -ljvm
   FIO_CFLAGS += $(HDFSFLAGS)
   SOURCE += engines/libhdfs.c
 endif
 
 ifdef CONFIG_LIBISCSI
-  iscsi_SRCS = engines/libiscsi.c
-  iscsi_LIBS = $(LIBISCSI_LIBS)
-  iscsi_CFLAGS = $(LIBISCSI_CFLAGS)
-  ENGINES += iscsi
+  libiscsi_SRCS = engines/libiscsi.c
+  libiscsi_LIBS = $(LIBISCSI_LIBS)
+  libiscsi_CFLAGS = $(LIBISCSI_CFLAGS)
+  ENGINES += libiscsi
 endif
 
 ifdef CONFIG_LIBNBD
@@ -79,20 +85,23 @@ ifdef CONFIG_LIBNBD
   ENGINES += nbd
 endif
 
+ifdef CONFIG_LIBNFS
+  CFLAGS += $(LIBNFS_CFLAGS)
+  LIBS += $(LIBNFS_LIBS)
+  SOURCE += engines/nfs.c
+endif
+
 ifdef CONFIG_64BIT
   CPPFLAGS += -DBITS_PER_LONG=64
 else ifdef CONFIG_32BIT
   CPPFLAGS += -DBITS_PER_LONG=32
 endif
 ifdef CONFIG_LIBAIO
-  aio_SRCS = engines/libaio.c
-  aio_LIBS = -laio
-  ifdef CONFIG_LIBAIO_URING
-    aio_LIBS = -luring
-  else
-    aio_LIBS = -laio
-  endif
-  ENGINES += aio
+  libaio_SRCS = engines/libaio.c
+  cmdprio_SRCS = engines/cmdprio.c
+  LIBS += -laio
+  libaio_LIBS = -laio
+  ENGINES += libaio
 endif
 ifdef CONFIG_RDMA
   rdma_SRCS = engines/rdma.c
@@ -123,6 +132,9 @@ endif
 ifdef CONFIG_LINUX_EXT4_MOVE_EXTENT
   SOURCE += engines/e4defrag.c
 endif
+ifdef CONFIG_LIBCUFILE
+  SOURCE += engines/libcufile.c
+endif
 ifdef CONFIG_LINUX_SPLICE
   SOURCE += engines/splice.c
 endif
@@ -146,6 +158,11 @@ ifdef CONFIG_HTTP
   http_SRCS = engines/http.c
   http_LIBS = -lcurl -lssl -lcrypto
   ENGINES += http
+endif
+ifdef CONFIG_DFS
+  dfs_SRCS = engines/dfs.c
+  dfs_LIBS = -luuid -ldaos -ldfs
+  ENGINES += dfs
 endif
 SOURCE += oslib/asprintf.c
 ifndef CONFIG_STRSEP
@@ -194,22 +211,23 @@ ifdef CONFIG_LINUX_DEVDAX
   ENGINES += dev-dax
 endif
 ifdef CONFIG_LIBPMEM
-  pmem_SRCS = engines/libpmem.c
-  pmem_LIBS = -lpmem
-  ENGINES += pmem
+  libpmem_SRCS = engines/libpmem.c
+  libpmem_LIBS = -lpmem
+  ENGINES += libpmem
 endif
 ifdef CONFIG_IME
   SOURCE += engines/ime.c
 endif
 ifdef CONFIG_LIBZBC
-  zbc_SRCS = engines/libzbc.c
-  zbc_LIBS = -lzbc
-  ENGINES += zbc
+  libzbc_SRCS = engines/libzbc.c
+  libzbc_LIBS = -lzbc
+  ENGINES += libzbc
 endif
 
 ifeq ($(CONFIG_TARGET_OS), Linux)
   SOURCE += diskutil.c fifo.c blktrace.c cgroup.c trim.c engines/sg.c \
 		oslib/linux-dev-lookup.c engines/io_uring.c
+  cmdprio_SRCS = engines/cmdprio.c
 ifdef CONFIG_HAS_BLKZONED
   SOURCE += oslib/linux-blkzoned.c
 endif
@@ -218,7 +236,8 @@ endif
 endif
 ifeq ($(CONFIG_TARGET_OS), Android)
   SOURCE += diskutil.c fifo.c blktrace.c cgroup.c trim.c profiles/tiobench.c \
-		oslib/linux-dev-lookup.c
+		oslib/linux-dev-lookup.c engines/io_uring.c
+  cmdprio_SRCS = engines/cmdprio.c
 ifdef CONFIG_HAS_BLKZONED
   SOURCE += oslib/linux-blkzoned.c
 endif
@@ -260,26 +279,38 @@ ifeq ($(CONFIG_TARGET_OS), Darwin)
   LIBS	 += -lpthread -ldl
 endif
 ifneq (,$(findstring CYGWIN,$(CONFIG_TARGET_OS)))
-  SOURCE += os/windows/cpu-affinity.c os/windows/posix.c
-  WINDOWS_OBJS = os/windows/cpu-affinity.o os/windows/posix.o lib/hweight.o
+  SOURCE += os/windows/cpu-affinity.c os/windows/posix.c os/windows/dlls.c
+  WINDOWS_OBJS = os/windows/cpu-affinity.o os/windows/posix.o os/windows/dlls.o lib/hweight.o
   LIBS	 += -lpthread -lpsapi -lws2_32 -lssp
   FIO_CFLAGS += -DPSAPI_VERSION=1 -Ios/windows/posix/include -Wno-format
+endif
+
+ifdef cmdprio_SRCS
+  SOURCE += $(cmdprio_SRCS)
 endif
 
 ifdef CONFIG_DYNAMIC_ENGINES
  DYNAMIC_ENGS := $(ENGINES)
 define engine_template =
 $(1)_OBJS := $$($(1)_SRCS:.c=.o)
-$$($(1)_OBJS): FIO_CFLAGS += -fPIC $$($(1)_CFLAGS)
-ENGS_OBJS += engines/lib$(1).so
+$$($(1)_OBJS): CFLAGS := -fPIC $$($(1)_CFLAGS) $(CFLAGS)
+engines/fio-$(1).so: $$($(1)_OBJS)
+	$$(QUIET_LINK)$(CC) $(DYNAMIC) -shared -rdynamic -fPIC -Wl,-soname,fio-$(1).so.1 -o $$@ $$< $$($(1)_LIBS)
+ENGS_OBJS += engines/fio-$(1).so
 endef
 else # !CONFIG_DYNAMIC_ENGINES
 define engine_template =
 SOURCE += $$($(1)_SRCS)
 LIBS += $$($(1)_LIBS)
-CFLAGS += $$($(1)_CFLAGS)
+override CFLAGS += $$($(1)_CFLAGS)
 endef
 endif
+
+FIO-VERSION-FILE: FORCE
+	@$(SHELL) $(SRCDIR)/FIO-VERSION-GEN
+-include FIO-VERSION-FILE
+
+override CFLAGS := -DFIO_VERSION='"$(FIO_VERSION)"' $(FIO_CFLAGS) $(CFLAGS)
 
 $(foreach eng,$(ENGINES),$(eval $(call engine_template,$(eng))))
 
@@ -345,8 +376,7 @@ T_VS_PROGS = t/fio-verify-state
 T_PIPE_ASYNC_OBJS = t/read-to-pipe-async.o
 T_PIPE_ASYNC_PROGS = t/read-to-pipe-async
 
-T_IOU_RING_OBJS = t/io_uring.o
-T_IOU_RING_OBJS += t/arch.o
+T_IOU_RING_OBJS = t/io_uring.o lib/rand.o lib/pattern.o lib/strntol.o
 T_IOU_RING_PROGS = t/io_uring
 
 T_MEMLOCK_OBJS = t/memlock.o
@@ -354,6 +384,23 @@ T_MEMLOCK_PROGS = t/memlock
 
 T_TT_OBJS = t/time-test.o
 T_TT_PROGS = t/time-test
+
+T_FUZZ_OBJS = t/fuzz/fuzz_parseini.o
+T_FUZZ_OBJS += $(OBJS)
+ifdef CONFIG_ARITHMETIC
+T_FUZZ_OBJS += lex.yy.o y.tab.o
+endif
+# in case there is no fuzz driver defined by environment variable LIB_FUZZING_ENGINE, use a simple one
+# For instance, with compiler clang, address sanitizer and libFuzzer as a fuzzing engine, you should define
+# export CFLAGS="-fsanitize=address,fuzzer-no-link"
+# export LIB_FUZZING_ENGINE="-fsanitize=address"
+# export CC=clang
+# before running configure && make
+# You can adapt this with different compilers, sanitizers, and fuzzing engines
+ifndef LIB_FUZZING_ENGINE
+T_FUZZ_OBJS += t/fuzz/onefile.o
+endif
+T_FUZZ_PROGS = t/fuzz/fuzz_parseini
 
 T_OBJS = $(T_SMALLOC_OBJS)
 T_OBJS += $(T_IEEE_OBJS)
@@ -368,6 +415,7 @@ T_OBJS += $(T_PIPE_ASYNC_OBJS)
 T_OBJS += $(T_MEMLOCK_OBJS)
 T_OBJS += $(T_TT_OBJS)
 T_OBJS += $(T_IOU_RING_OBJS)
+T_OBJS += $(T_FUZZ_OBJS)
 
 ifneq (,$(findstring CYGWIN,$(CONFIG_TARGET_OS)))
     T_DEDUPE_OBJS += $(WINDOWS_OBJS)
@@ -391,6 +439,7 @@ endif
 ifneq (,$(findstring Linux,$(CONFIG_TARGET_OS)))
 T_TEST_PROGS += $(T_IOU_RING_PROGS)
 endif
+T_TEST_PROGS += $(T_FUZZ_PROGS)
 
 PROGS += $(T_PROGS)
 
@@ -448,12 +497,6 @@ all: $(PROGS) $(T_TEST_PROGS) $(UT_PROGS) $(SCRIPTS) $(ENGS_OBJS) FORCE
 
 .PHONY: all install clean test
 .PHONY: FORCE cscope
-
-FIO-VERSION-FILE: FORCE
-	@$(SHELL) $(SRCDIR)/FIO-VERSION-GEN
--include FIO-VERSION-FILE
-
-override CFLAGS := -DFIO_VERSION='"$(FIO_VERSION)"' $(FIO_CFLAGS) $(CFLAGS)
 
 %.o : %.c
 	@mkdir -p $(dir $@)
@@ -548,6 +591,13 @@ t/ieee754: $(T_IEEE_OBJS)
 fio: $(FIO_OBJS)
 	$(QUIET_LINK)$(CC) $(LDFLAGS) -o $@ $(FIO_OBJS) $(LIBS) $(HDFSLIB)
 
+t/fuzz/fuzz_parseini: $(T_FUZZ_OBJS)
+ifndef LIB_FUZZING_ENGINE
+	$(QUIET_LINK)$(CC) $(LDFLAGS) -o $@ $(T_FUZZ_OBJS) $(LIBS) $(HDFSLIB)
+else
+	$(QUIET_LINK)$(CXX) $(LDFLAGS) -o $@ $(T_FUZZ_OBJS) $(LIB_FUZZING_ENGINE) $(LIBS) $(HDFSLIB)
+endif
+
 gfio: $(GFIO_OBJS)
 	$(QUIET_LINK)$(CC) $(filter-out -static, $(LDFLAGS)) -o gfio $(GFIO_OBJS) $(LIBS) $(GFIO_LIBS) $(GTK_LDFLAGS) $(HDFSLIB)
 
@@ -582,13 +632,8 @@ unittests/unittest: $(UT_OBJS) $(UT_TARGET_OBJS)
 	$(QUIET_LINK)$(CC) $(LDFLAGS) -o $@ $(UT_OBJS) $(UT_TARGET_OBJS) -lcunit $(LIBS)
 endif
 
-ifdef CONFIG_DYNAMIC_ENGINES
-engines/lib$(1).so: $$($(1)_OBJS)
-	$$(QUIET_LINK)$(CC) -shared -rdynamic -fPIC -Wl,-soname,lib$(1).so.1 $$($(1)_LIBS) -o $$@ $$<
-endif
-
 clean: FORCE
-	@rm -f .depend $(FIO_OBJS) $(GFIO_OBJS) $(OBJS) $(T_OBJS) $(UT_OBJS) $(PROGS) $(T_PROGS) $(T_TEST_PROGS) core.* core gfio unittests/unittest FIO-VERSION-FILE *.[do] lib/*.d oslib/*.[do] crc/*.d engines/*.[do] engines/*.so profiles/*.[do] t/*.[do] unittests/*.[do] unittests/*/*.[do] config-host.mak config-host.h y.tab.[ch] lex.yy.c exp/*.[do] lexer.h
+	@rm -f .depend $(FIO_OBJS) $(GFIO_OBJS) $(OBJS) $(T_OBJS) $(UT_OBJS) $(PROGS) $(T_PROGS) $(T_TEST_PROGS) core.* core gfio unittests/unittest FIO-VERSION-FILE *.[do] lib/*.d oslib/*.[do] crc/*.d engines/*.[do] engines/*.so profiles/*.[do] t/*.[do] t/*/*.[do] unittests/*.[do] unittests/*/*.[do] config-host.mak config-host.h y.tab.[ch] lex.yy.c exp/*.[do] lexer.h
 	@rm -f t/fio-btrace2fio t/io_uring t/read-to-pipe-async
 	@rm -rf  doc/output
 
@@ -613,16 +658,17 @@ test: fio
 fulltest:
 	sudo modprobe null_blk &&				 	\
 	if [ ! -e /usr/include/libzbc/zbc.h ]; then			\
-	  git clone https://github.com/hgst/libzbc &&		 	\
+	  git clone https://github.com/westerndigitalcorporation/libzbc && \
 	  (cd libzbc &&						 	\
 	   ./autogen.sh &&					 	\
 	   ./configure --prefix=/usr &&				 	\
 	   make -j &&						 	\
 	   sudo make install)						\
 	fi &&					 			\
-	sudo t/zbd/run-tests-against-regular-nullb &&		 	\
+	sudo t/zbd/run-tests-against-nullb -s 1 &&		 	\
 	if [ -e /sys/module/null_blk/parameters/zoned ]; then		\
-		sudo t/zbd/run-tests-against-zoned-nullb;	 	\
+		sudo t/zbd/run-tests-against-nullb -s 2;	 	\
+		sudo t/zbd/run-tests-against-nullb -s 4;	 	\
 	fi
 
 install: $(PROGS) $(SCRIPTS) $(ENGS_OBJS) tools/plot/fio2gnuplot.1 FORCE

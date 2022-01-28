@@ -5,9 +5,9 @@
 
 struct fio_flow {
 	unsigned int refs;
-	struct flist_head list;
 	unsigned int id;
-	unsigned long long flow_counter;
+	struct flist_head list;
+	unsigned long flow_counter;
 	unsigned int total_weight;
 };
 
@@ -37,6 +37,8 @@ int flow_threshold_exceeded(struct thread_data *td)
 		if (td->o.flow_sleep) {
 			io_u_quiesce(td);
 			usleep(td->o.flow_sleep);
+		} else if (td->o.zone_mode == ZONE_MODE_ZBD) {
+			io_u_quiesce(td);
 		}
 
 		return 1;
@@ -90,7 +92,7 @@ static struct fio_flow *flow_get(unsigned int id)
 	return flow;
 }
 
-static void flow_put(struct fio_flow *flow, unsigned long long flow_counter,
+static void flow_put(struct fio_flow *flow, unsigned long flow_counter,
 				        unsigned int weight)
 {
 	if (!flow_lock)

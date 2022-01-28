@@ -49,6 +49,7 @@ import shutil
 import logging
 import argparse
 import platform
+import traceback
 import subprocess
 import multiprocessing
 from pathlib import Path
@@ -879,8 +880,8 @@ TEST_LIST = [
     {
         'test_id':          1007,
         'test_class':       FioExeTest,
-        'exe':              't/zbd/run-tests-against-regular-nullb',
-        'parameters':       None,
+        'exe':              't/zbd/run-tests-against-nullb',
+        'parameters':       ['-s', '1'],
         'success':          SUCCESS_DEFAULT,
         'requirements':     [Requirements.linux, Requirements.zbd,
                              Requirements.root],
@@ -888,8 +889,8 @@ TEST_LIST = [
     {
         'test_id':          1008,
         'test_class':       FioExeTest,
-        'exe':              't/zbd/run-tests-against-zoned-nullb',
-        'parameters':       None,
+        'exe':              't/zbd/run-tests-against-nullb',
+        'parameters':       ['-s', '2'],
         'success':          SUCCESS_DEFAULT,
         'requirements':     [Requirements.linux, Requirements.zbd,
                              Requirements.root, Requirements.zoned_nullb],
@@ -1057,9 +1058,16 @@ def main():
                 skipped = skipped + 1
                 continue
 
-        test.setup(artifact_root, config['test_id'])
-        test.run()
-        test.check_result()
+        try:
+            test.setup(artifact_root, config['test_id'])
+            test.run()
+            test.check_result()
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            test.passed = False
+            test.failure_reason += str(e)
+            logging.debug("Test %d exception:\n%s\n", config['test_id'], traceback.format_exc())
         if test.passed:
             result = "PASSED"
             passed = passed + 1

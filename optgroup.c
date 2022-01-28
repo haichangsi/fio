@@ -178,6 +178,18 @@ static const struct opt_group fio_opt_cat_groups[] = {
 		.mask	= FIO_OPT_G_NBD,
 	},
 	{
+		.name	= "libcufile I/O engine", /* libcufile */
+		.mask	= FIO_OPT_G_LIBCUFILE,
+	},
+	{
+		.name	= "DAOS File System (dfs) I/O engine", /* dfs */
+		.mask	= FIO_OPT_G_DFS,
+	},
+	{
+		.name	= "NFS I/O engine", /* nfs */
+		.mask	= FIO_OPT_G_NFS,
+	},
+	{
 		.name	= NULL,
 	},
 };

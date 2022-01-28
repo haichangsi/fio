@@ -917,7 +917,7 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		return -1;
 	}
 
-	is_dram = (strcmp(f->file_name, "malloc") == 0);
+	is_dram = !strcmp(f->file_name, "malloc");
 	if (is_dram) {
 		/* allocation from DRAM using posix_memalign() */
 		ws_ptr = librpma_fio_allocate_dram(td, mem_size, &csd->mem);
@@ -941,17 +941,19 @@ int librpma_fio_server_open_file(struct thread_data *td, struct fio_file *f,
 		goto err_free;
 	}
 
-	if (!is_dram && f->filetype == FIO_TYPE_FILE &&
-		(ret = rpma_mr_advise(mr, 0, mem_size,
+	if (!is_dram && f->filetype == FIO_TYPE_FILE) {
+		ret = rpma_mr_advise(mr, 0, mem_size,
 				IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-				IBV_ADVISE_MR_FLAG_FLUSH))) {
-		librpma_td_verror(td, ret, "rpma_mr_advise");
-		/* an invalid argument is an error */
-		if (ret == RPMA_E_INVAL)
-			goto err_mr_dereg;
+				IBV_ADVISE_MR_FLAG_FLUSH);
+		if (ret) {
+			librpma_td_verror(td, ret, "rpma_mr_advise");
+			/* an invalid argument is an error */
+			if (ret == RPMA_E_INVAL)
+				goto err_mr_dereg;
 
-		/* XXX log_info mixes with the JSON output */
-		log_err("Note: Having rpma_mr_advise(3) failed because of RPMA_E_NOSUPP or RPMA_E_PROVIDER may come with a performance penalty but it is not a showstopper for running the benchmark.\n");
+			/* log_err used instead of log_info to avoid corruption of the JSON output */
+			log_err("Note: having rpma_mr_advise(3) failed because of RPMA_E_NOSUPP or RPMA_E_PROVIDER may come with a performance penalty, but it is not a blocker for running the benchmark.\n");
+		}
 	}
 
 	/* get size of the memory region's descriptor */

@@ -1111,7 +1111,7 @@ static void handle_ts(struct fio_client *client, struct fio_net_cmd *cmd)
 	if (sum_stat_clients <= 1)
 		return;
 
-	sum_thread_stats(&client_ts, &p->ts, sum_stat_nr == 1);
+	sum_thread_stats(&client_ts, &p->ts);
 	sum_group_stats(&client_gs, &p->rs);
 
 	client_ts.members++;
@@ -1679,6 +1679,7 @@ static struct cmd_iolog_pdu *convert_iolog(struct fio_net_cmd *cmd,
 	ret->log_type		= le32_to_cpu(ret->log_type);
 	ret->compressed		= le32_to_cpu(ret->compressed);
 	ret->log_offset		= le32_to_cpu(ret->log_offset);
+	ret->log_prio		= le32_to_cpu(ret->log_prio);
 	ret->log_hist_coarseness = le32_to_cpu(ret->log_hist_coarseness);
 
 	if (*store_direct)
@@ -1696,6 +1697,7 @@ static struct cmd_iolog_pdu *convert_iolog(struct fio_net_cmd *cmd,
 		s->data.val	= le64_to_cpu(s->data.val);
 		s->__ddir	= __le32_to_cpu(s->__ddir);
 		s->bs		= le64_to_cpu(s->bs);
+		s->priority	= le16_to_cpu(s->priority);
 
 		if (ret->log_offset) {
 			struct io_sample_offset *so = (void *) s;
