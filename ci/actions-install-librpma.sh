@@ -1,7 +1,8 @@
 #!/bin/bash -e
 
-# Jan 24 2022 Merge pull request #1513 from ldorau/common-0.10.0-release
-LIBRPMA_VERSION=0.10.0
+# Feb 02 2022 Merge pull request #1525 from haichangsi/deprecated_cq
+# rpma: mark as deprecated rpma_cq_get_completion(), struct rpma_completion and enum rpma_op
+LIBRPMA_VERSION=78c5dde32d6ea38b18485d72f87ff758a320a0a6
 ZIP_FILE=rpma.zip
 
 WORKDIR=$(pwd)
