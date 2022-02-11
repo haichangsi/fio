@@ -78,6 +78,8 @@ DPKGCFG
     if [[ $CI_TARGET_ARCH == "x86_64" ]]; then
         # install libprotobuf-c-dev required by librpma_gpspm
         sudo apt-get install --no-install-recommends -qq -y libprotobuf-c-dev
+        # install PMDK from sources from GitHub
+        ci/actions-install-pmdk.sh
         # install librpma from sources from GitHub
         ci/actions-install-librpma.sh
     fi
