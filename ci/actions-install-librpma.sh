@@ -1,8 +1,8 @@
 #!/bin/bash -e
 
-# Feb 08 2022 Merge pull request #1560 from ldorau/common-0.11.0-release
-# common: 0.11.0 release
-LIBRPMA_VERSION=0.11.0
+# Feb 14 2022 Merge pull request #1579 from ldorau/common-0.12.0-rc1-release
+# common: 0.12.0-rc1 release
+LIBRPMA_VERSION="0.12.0-rc1"
 
 WORKDIR=$(pwd)
 ZIP_FILE=rpma.zip
