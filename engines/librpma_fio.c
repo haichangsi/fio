@@ -1,7 +1,7 @@
 /*
  * librpma_fio: librpma_apm and librpma_gpspm engines' common part.
  *
- * Copyright 2021, Intel Corporation
+ * Copyright 2021-2022, Intel Corporation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License,
@@ -15,7 +15,7 @@
 
 #include "librpma_fio.h"
 
-#include <libpmem.h>
+#include <libpmem2.h>
 
 struct fio_option librpma_fio_options[] = {
 	{
@@ -111,9 +111,12 @@ char *librpma_fio_allocate_dram(struct thread_data *td, size_t size,
 char *librpma_fio_allocate_pmem(struct thread_data *td, struct fio_file *f,
 		size_t size, struct librpma_fio_mem *mem)
 {
-	size_t size_mmap = 0;
+	int fd, err;
+	struct pmem2_config *cfg = NULL;
+	struct pmem2_map *map = NULL;
+	struct pmem2_source *src = NULL;
 	char *mem_ptr = NULL;
-	int is_pmem = 0;
+	size_t size_mmap = 0;
 	size_t ws_offset;
 
 	if (size % page_size) {
@@ -134,19 +137,41 @@ char *librpma_fio_allocate_pmem(struct thread_data *td, struct fio_file *f,
 		log_err("fio: filename is not set\n");
 		return NULL;
 	}
+	if((fd = open(f->file_name, O_RDWR)) < 0) {
+		log_err("fio: cannot open fio file\n");
+		return NULL;
+	}
 
-	/* map the file */
-	mem_ptr = pmem_map_file(f->file_name, 0 /* len */, 0 /* flags */,
-			0 /* mode */, &size_mmap, &is_pmem);
-	if (mem_ptr == NULL) {
+	if (pmem2_config_new(&cfg)) {
+		log_err("pmem2_config_new");
+		return NULL;
+	}
+
+	if (pmem2_source_from_fd(&src, fd)) {
+		log_err("pmem2_source_from_fd");
+		return NULL;
+	}
+
+	if (pmem2_config_set_required_store_granularity(cfg,
+					 PMEM2_GRANULARITY_CACHE_LINE)) {
+		log_err("pmem2_config_set_required_store_granularity");
+		return NULL;
+	}
+
+	err = pmem2_map_new(&map, cfg, src);
+	if (map == NULL) {
 		log_err("fio: pmem_map_file(%s) failed\n", f->file_name);
 		/* pmem_map_file() sets errno on failure */
 		td_verror(td, errno, "pmem_map_file");
 		return NULL;
 	}
 
+	mem_ptr = pmem2_map_get_address(map);
+	size_mmap = pmem2_map_get_size(map);
+
+
 	/* pmem is expected */
-	if (!is_pmem) {
+	if (err == PMEM2_E_GRANULARITY_NOT_SUPPORTED) {
 		log_err("fio: %s is not located in persistent memory\n",
 			f->file_name);
 		goto err_unmap;
@@ -165,18 +190,27 @@ char *librpma_fio_allocate_pmem(struct thread_data *td, struct fio_file *f,
 
 	mem->mem_ptr = mem_ptr;
 	mem->size_mmap = size_mmap;
+	mem->map = map;
+	mem->cfg = cfg;
+	mem->src = src;
 
 	return mem_ptr + ws_offset;
+	close(fd);
 
 err_unmap:
-	(void) pmem_unmap(mem_ptr, size_mmap);
+	pmem2_map_delete(&map);
+	pmem2_source_delete(&src);
+	pmem2_config_delete(&cfg);
+	close(fd);
 	return NULL;
 }
 
 void librpma_fio_free(struct librpma_fio_mem *mem)
 {
-	if (mem->size_mmap)
-		(void) pmem_unmap(mem->mem_ptr, mem->size_mmap);
+	if (map)
+		pmem2_map_delete(&(mem->map));
+		pmem2_source_delete(&(mem->src));
+		pmem2_config_delete(&(mem->cfg));
 	else
 		free(mem->mem_ptr);
 }

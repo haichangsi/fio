@@ -111,13 +111,13 @@ endif
 ifdef CONFIG_LIBRPMA_APM
   librpma_apm_SRCS = engines/librpma_apm.c
   librpma_fio_SRCS = engines/librpma_fio.c
-  librpma_apm_LIBS = -lrpma -lpmem
+  librpma_apm_LIBS = -lrpma -lpmem -lpmem2
   ENGINES += librpma_apm
 endif
 ifdef CONFIG_LIBRPMA_GPSPM
   librpma_gpspm_SRCS = engines/librpma_gpspm.c engines/librpma_gpspm_flush.pb-c.c
   librpma_fio_SRCS = engines/librpma_fio.c
-  librpma_gpspm_LIBS = -lrpma -lpmem -lprotobuf-c
+  librpma_gpspm_LIBS = -lrpma -lpmem -lpmem2 -lprotobuf-c
   ENGINES += librpma_gpspm
 endif
 ifdef librpma_fio_SRCS
@@ -215,6 +215,7 @@ ifdef CONFIG_LIBPMEM
   libpmem_LIBS = -lpmem
   ENGINES += libpmem
 endif
+
 ifdef CONFIG_IME
   SOURCE += engines/ime.c
 endif

@@ -1,7 +1,7 @@
 /*
  * librpma_fio: librpma_apm and librpma_gpspm engines' common header.
  *
- * Copyright 2021, Intel Corporation
+ * Copyright 2021-2022, Intel Corporation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License,
@@ -20,6 +20,7 @@
 #include "../optgroup.h"
 
 #include <librpma.h>
+#include <libpmem2.h>
 
 /* servers' and clients' common */
 
@@ -72,6 +73,10 @@ struct librpma_fio_mem {
 
 	/* size of the mapped persistent memory */
 	size_t size_mmap;
+
+	struct pmem2_config *cfg;
+	struct pmem2_map *map;
+	struct pmem2_source *src;
 };
 
 char *librpma_fio_allocate_dram(struct thread_data *td, size_t size,
