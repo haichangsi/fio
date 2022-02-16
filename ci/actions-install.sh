@@ -49,8 +49,6 @@ DPKGCFG
             pkgs+=(
                 libgoogle-perftools-dev
                 libnbd-dev
-                libpmem-dev
-                libpmemblk-dev
                 libtcmalloc-minimal4
             )
             if [ "${CI_EVENT}" == "schedule" ]; then
