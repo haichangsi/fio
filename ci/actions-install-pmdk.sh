@@ -26,8 +26,3 @@ make -j$(nproc) NDCTL_ENABLE=n
 sudo make -j$(nproc) install prefix=/usr NDCTL_ENABLE=n
 cd $WORKDIR
 rm -rf pmdk-${PMDK_VERSION}
-
-PMDK_LIBS="libpmem libpmem2 libpmemblk"
-for lib in $PMDK_LIBS; do
-    sudo ln -s /usr/lib64/${lib}.so.1 /usr/lib/x86_64-linux-gnu/${lib}.so.1
-done

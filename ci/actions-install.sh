@@ -80,6 +80,8 @@ DPKGCFG
         ci/actions-install-pmdk.sh
         # install librpma from sources from GitHub
         ci/actions-install-librpma.sh
+        # librpma and pmdk libraries are installed in /usr/lib64/
+        sudo ldconfig -v /usr/lib64/
     fi
 }
 
