@@ -646,6 +646,25 @@ fi
 print_config "zlib" "$zlib"
 
 ##########################################
+# fcntl(F_FULLFSYNC) support
+if test "$fcntl_sync" != "yes" ; then
+  fcntl_sync="no"
+fi
+cat > $TMPC << EOF
+#include <unistd.h>
+#include <fcntl.h>
+
+int main(int argc, char **argv)
+{
+  return fcntl(0, F_FULLFSYNC);
+}
+EOF
+if compile_prog "" "" "fcntl(F_FULLFSYNC)" ; then
+    fcntl_sync="yes"
+fi
+print_config "fcntl(F_FULLFSYNC)" "$fcntl_sync"
+
+##########################################
 # linux-aio probe
 if test "$libaio" != "yes" ; then
   libaio="no"
@@ -955,7 +974,7 @@ print_config "rdmacm" "$rdmacm"
 
 ##########################################
 # librpma probe
-# The librpma engine requires librpma>=v0.10.0 with rpma_mr_advise().
+# The librpma engines require librpma>=v0.11.0 with rpma_cq_get_wc().
 if test "$librpma" != "yes" ; then
   librpma="no"
 fi
@@ -963,7 +982,7 @@ cat > $TMPC << EOF
 #include <librpma.h>
 int main(void)
 {
-  void *ptr = rpma_mr_advise;
+  void *ptr = rpma_cq_get_wc;
   (void) ptr; /* unused */
   return 0;
 }
@@ -3173,6 +3192,9 @@ if test "$dynamic_engines" = "yes" ; then
 fi
 if test "$pdb" = yes; then
   output_sym "CONFIG_PDB"
+fi
+if test "$fcntl_sync" = "yes" ; then
+  output_sym "CONFIG_FCNTL_SYNC"
 fi
 
 print_config "Lib-based ioengines dynamic" "$dynamic_engines"

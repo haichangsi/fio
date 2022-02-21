@@ -287,6 +287,7 @@ out:
 	free(ovals);
 }
 
+#ifdef ARCH_HAVE_CPU_CLOCK
 static unsigned int plat_val_to_idx(unsigned long val)
 {
 	unsigned int msb, error_bits, base, offset, idx;
@@ -322,6 +323,7 @@ static unsigned int plat_val_to_idx(unsigned long val)
 
 	return idx;
 }
+#endif
 
 static void add_stat(struct submitter *s, int clock_index, int nr)
 {
@@ -362,7 +364,7 @@ static int io_uring_register_buffers(struct submitter *s)
 		return 0;
 
 	return syscall(__NR_io_uring_register, s->ring_fd,
-			IORING_REGISTER_BUFFERS, s->iovecs, depth);
+			IORING_REGISTER_BUFFERS, s->iovecs, roundup_pow2(depth));
 }
 
 static int io_uring_register_files(struct submitter *s)
@@ -712,12 +714,15 @@ static int reap_events_aio(struct submitter *s, struct io_event *events, int evs
 static void *submitter_aio_fn(void *data)
 {
 	struct submitter *s = data;
-	int i, ret, prepped, nr_batch;
+	int i, ret, prepped;
 	struct iocb **iocbsptr;
 	struct iocb *iocbs;
 	struct io_event *events;
-
-	nr_batch = submitter_init(s);
+#ifdef ARCH_HAVE_CPU_CLOCK
+	int nr_batch = submitter_init(s);
+#else
+	submitter_init(s);
+#endif
 
 	iocbsptr = calloc(depth, sizeof(struct iocb *));
 	iocbs = calloc(depth, sizeof(struct iocb));
@@ -789,9 +794,12 @@ static void *submitter_uring_fn(void *data)
 {
 	struct submitter *s = data;
 	struct io_sq_ring *ring = &s->sq_ring;
-	int ret, prepped, nr_batch;
-
-	nr_batch = submitter_init(s);
+	int ret, prepped;
+#ifdef ARCH_HAVE_CPU_CLOCK
+	int nr_batch = submitter_init(s);
+#else
+	submitter_init(s);
+#endif
 
 	prepped = 0;
 	do {
@@ -954,7 +962,7 @@ static int setup_aio(struct submitter *s)
 		fixedbufs = register_files = 0;
 	}
 
-	return io_queue_init(depth, &s->aio_ctx);
+	return io_queue_init(roundup_pow2(depth), &s->aio_ctx);
 #else
 	fprintf(stderr, "Legacy AIO not available on this system/build\n");
 	errno = EINVAL;
@@ -1148,6 +1156,7 @@ int main(int argc, char *argv[])
 	struct submitter *s;
 	unsigned long done, calls, reap;
 	int err, i, j, flags, fd, opt, threads_per_f, threads_rem = 0, nfiles;
+	long page_size;
 	struct file f;
 	char *fdepths;
 	void *ret;
@@ -1241,7 +1250,7 @@ int main(int argc, char *argv[])
 		dma_map = 0;
 
 	submitter = calloc(nthreads, sizeof(*submitter) +
-				depth * sizeof(struct iovec));
+				roundup_pow2(depth) * sizeof(struct iovec));
 	for (j = 0; j < nthreads; j++) {
 		s = get_submitter(j);
 		s->index = j;
@@ -1311,12 +1320,16 @@ int main(int argc, char *argv[])
 
 	arm_sig_int();
 
+	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size < 0)
+		page_size = 4096;
+
 	for (j = 0; j < nthreads; j++) {
 		s = get_submitter(j);
-		for (i = 0; i < depth; i++) {
+		for (i = 0; i < roundup_pow2(depth); i++) {
 			void *buf;
 
-			if (posix_memalign(&buf, bs, bs)) {
+			if (posix_memalign(&buf, page_size, bs)) {
 				printf("failed alloc\n");
 				return 1;
 			}

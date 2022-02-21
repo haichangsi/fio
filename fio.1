@@ -1122,7 +1122,7 @@ see \fBend_fsync\fR and \fBfsync_on_close\fR.
 .TP
 .BI fdatasync \fR=\fPint
 Like \fBfsync\fR but uses \fBfdatasync\fR\|(2) to only sync data and
-not metadata blocks. In Windows, FreeBSD, DragonFlyBSD or OSX there is no
+not metadata blocks. In Windows, DragonFlyBSD or OSX there is no
 \fBfdatasync\fR\|(2) so this falls back to using \fBfsync\fR\|(2).
 Defaults to 0, which means fio does not periodically issue and wait for a
 data-only sync to complete.
@@ -1686,10 +1686,10 @@ also be set as number of zones using 'z'.
 .TP
 .BI filesize \fR=\fPirange(int)
 Individual file sizes. May be a range, in which case fio will select sizes
-for files at random within the given range and limited to \fBsize\fR in
-total (if that is given). If not given, each created file is the same size.
-This option overrides \fBsize\fR in terms of file size, which means
-this value is used as a fixed size or possible range of each file.
+for files at random within the given range. If not given, each created file
+is the same size. This option overrides \fBsize\fR in terms of file size, 
+i.e. \fBsize\fR becomes merely the default for \fBio_size\fR (and
+has no effect it all if \fBio_size\fR is set explicitly).
 .TP
 .BI file_append \fR=\fPbool
 Perform I/O after the end of the file. Normally fio will operate within the
@@ -1995,10 +1995,34 @@ To get a finer control over I/O priority, this option allows specifying
 the percentage of IOs that must have a priority set depending on the block
 size of the IO. This option is useful only when used together with the option
 \fBbssplit\fR, that is, multiple different block sizes are used for reads and
-writes. The format for this option is the same as the format of the
-\fBbssplit\fR option, with the exception that values for trim IOs are
-ignored. This option is mutually exclusive with the \fBcmdprio_percentage\fR
-option.
+writes.
+.RS
+.P
+The first accepted format for this option is the same as the format of the
+\fBbssplit\fR option:
+.RS
+.P
+cmdprio_bssplit=blocksize/percentage:blocksize/percentage
+.RE
+.P
+In this case, each entry will use the priority class and priority level defined
+by the options \fBcmdprio_class\fR and \fBcmdprio\fR respectively.
+.P
+The second accepted format for this option is:
+.RS
+.P
+cmdprio_bssplit=blocksize/percentage/class/level:blocksize/percentage/class/level
+.RE
+.P
+In this case, the priority class and priority level is defined inside each
+entry. In comparison with the first accepted format, the second accepted format
+does not restrict all entries to have the same priority class and priority
+level.
+.P
+For both formats, only the read and write data directions are supported, values
+for trim IOs are ignored. This option is mutually exclusive with the
+\fBcmdprio_percentage\fR option.
+.RE
 .TP
 .BI (io_uring)fixedbufs
 If fio is asked to do direct IO, then Linux will map pages for each IO call, and
@@ -2066,6 +2090,19 @@ option when using cpuio I/O engine.
 .TP
 .BI (cpuio)cpuchunks \fR=\fPint
 Split the load into cycles of the given time. In microseconds.
+.TP
+.BI (cpuio)cpumode \fR=\fPstr
+Specify how to stress the CPU. It can take these two values:
+.RS
+.RS
+.TP
+.B noop
+This is the default and directs the CPU to execute noop instructions.
+.TP
+.B qsort
+Replace the default noop instructions with a qsort algorithm to consume more energy.
+.RE
+.RE
 .TP
 .BI (cpuio)exit_on_io_done \fR=\fPbool
 Detect when I/O threads are done, then exit.
@@ -3359,6 +3396,17 @@ parameter. The files will be stored with a `.fz' suffix.
 If set, fio will log Unix timestamps to the log files produced by enabling
 write_type_log for each log type, instead of the default zero-based
 timestamps.
+.TP
+.BI log_alternate_epoch \fR=\fPbool
+If set, fio will log timestamps based on the epoch used by the clock specified
+in the \fBlog_alternate_epoch_clock_id\fR option, to the log files produced by
+enabling write_type_log for each log type, instead of the default zero-based
+timestamps.
+.TP
+.BI log_alternate_epoch_clock_id \fR=\fPint
+Specifies the clock_id to be used by clock_gettime to obtain the alternate epoch
+if either \fBBlog_unix_epoch\fR or \fBlog_alternate_epoch\fR are true. Otherwise has no
+effect. Default value is 0, or CLOCK_REALTIME.
 .TP
 .BI block_error_percentiles \fR=\fPbool
 If set, record errors in trim block-sized units from writes and trims and
