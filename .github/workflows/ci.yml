@@ -31,9 +31,15 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v2
-    - name: Install dependencies
+    - name: Install dependencies (with libpmem)
       run: ./ci/actions-install.sh
-    - name: Build
+    - name: Build no. 1 with libpmem
+      run: ./ci/actions-build.sh
+    - name: Clean the previous build
+      run: ./ci/actions-clean.sh
+    - name: Install PMDK (with libpmem2)
+      run: ./ci/actions-install-pmdk.sh
+    - name: Build no. 2 with libpmem2
       run: ./ci/actions-build.sh
     - name: Smoke test
       run: ./ci/actions-smoke-test.sh

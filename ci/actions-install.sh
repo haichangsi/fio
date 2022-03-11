@@ -49,6 +49,8 @@ DPKGCFG
             pkgs+=(
                 libgoogle-perftools-dev
                 libnbd-dev
+                libpmem-dev
+                libpmemblk-dev
                 libtcmalloc-minimal4
             )
             if [ "${CI_EVENT}" == "schedule" ]; then
@@ -77,11 +79,9 @@ DPKGCFG
     if [[ $CI_TARGET_ARCH == "x86_64" ]]; then
         # install libprotobuf-c-dev required by librpma_gpspm
         sudo apt-get install --no-install-recommends -qq -y libprotobuf-c-dev
-        # install PMDK from sources from GitHub
-        ci/actions-install-pmdk.sh
         # install librpma from sources from GitHub
         ci/actions-install-librpma.sh
-        # librpma and pmdk libraries are installed in /usr/lib64/
+        # librpma libraries are installed in /usr/lib64/
         sudo ldconfig -v /usr/lib64/
     fi
 }

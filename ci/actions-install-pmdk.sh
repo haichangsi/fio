@@ -26,3 +26,6 @@ make -j$(nproc) NDCTL_ENABLE=n
 sudo make -j$(nproc) install prefix=/usr NDCTL_ENABLE=n
 cd $WORKDIR
 rm -rf pmdk-${PMDK_VERSION}
+
+# pmdk libraries are installed in /usr/lib64/
+sudo ldconfig -v /usr/lib64/
