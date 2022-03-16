@@ -36,7 +36,7 @@ jobs:
     - name: Build no. 1 with libpmem
       run: ./ci/actions-build.sh
     - name: Verify no. 1 with libpmem
-      run: ./ci/verify-rpma.sh
+      run: ./ci/verify-rpma.sh libpmem
     - name: Clean the previous build
       run: ./ci/actions-clean.sh
     - name: Install PMDK (with libpmem2)
@@ -44,7 +44,7 @@ jobs:
     - name: Build no. 2 with libpmem2
       run: ./ci/actions-build.sh
     - name: Verify no. 2 with libpmem2
-      run: ./ci/verify-rpma.sh
+      run: ./ci/verify-rpma.sh libpmem2
     - name: Smoke test
       run: ./ci/actions-smoke-test.sh
     - name: Full test
